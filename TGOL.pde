@@ -1,4 +1,8 @@
 import java.util.concurrent.TimeUnit;
+import java.io.FileWriter;
+import java.io.File;
+import java.util.Scanner;
+
 
 int _width = 1000;
 int _height = 1000;
@@ -10,14 +14,27 @@ int origin_y;
 
 int last_x_index;
 int last_y_index;
+boolean is_right_click;
 
 Cell[][] grid;
 boolean[][] saved_grid;
+Linked_list selected_cells;
+int[][] construct;
+
+String[] lines;
+
+File out_file;
+FileWriter writer;
+
+Scanner scan;
 
 public void setup(){
   size(1000, 1000);
+  selected_cells = new Linked_list();
   grid = new Cell[(_width/_size)][(_height/_size)];
   saved_grid = new boolean[(_width/_size)][(_height/_size)];
+  lines = loadStrings("constructs.txt");
+  scan = new Scanner(System.in);
   for(int i = 0; i < (grid.length); i ++)
   {
     for(int j = 0; j < (grid[i].length); j++)
@@ -26,6 +43,16 @@ public void setup(){
     }
   
   }
+  
+  try
+  {
+    writer = new FileWriter(sketchPath() + "/constructs.txt",true);
+  }
+  catch(IOException error)
+  {
+    System.out.println("file = null.");
+  }
+  
 }
 
 public void draw(){
@@ -72,46 +99,99 @@ public void mousePressed(){
   if (mouseButton == LEFT)
   {
     cell_under_mouse.is_alive = !cell_under_mouse.is_alive;
+    is_right_click = false;
   }else if(mouseButton == RIGHT)
   {
+    cell_under_mouse.is_alive = !cell_under_mouse.is_alive;
     cell_under_mouse.is_selected = !cell_under_mouse.is_selected;
-    counter++;
+    if(cell_under_mouse.is_selected)
+    {
+      selected_cells._add(cell_under_mouse);
+    }
+    else
+    {
+      selected_cells._remove(cell_under_mouse);
+    }
+    is_right_click = true;
   }
 }
 
 public void keyPressed(){
-  if(key == ' ')
+  if (Character.isDigit(key) && (key-48 <= (lines.length - 1)))
   {
-    pause = !pause;
+    file_2_write(lines[key-48]);
   }
-  if(key == 's')
+  switch(key)
   {
-    for(int i = 0; i < (grid.length); i ++)
-    {
-      for(int j = 0; j < (grid[i].length); j++)
+    case ' ':
+      pause = !pause;
+      break;
+      
+    case 'c':
+      construct = constructor(origin_x, origin_y, selected_cells);
+      break;
+      
+    case 'd':
+      deconstruct(origin_x, origin_y, construct, grid.length, grid[0].length);
+      break;
+      
+    case 's':
+      for(int i = 0; i < (grid.length); i ++)
       {
-        saved_grid[i][j] = grid[i][j].is_alive;
+        for(int j = 0; j < (grid[i].length); j++)
+        {
+          saved_grid[i][j] = grid[i][j].is_alive;
+        }
+      
       }
-    
-    }
-  }
-  if(key == 'r')
-  {
-    for(int i = 0; i < (grid.length); i ++)
-    {
-      for(int j = 0; j < (grid[i].length); j++)
+      break;
+      
+    case 'r':
+      for(int i = 0; i < (grid.length); i ++)
       {
-        grid[i][j].is_alive = saved_grid[i][j];
+        for(int j = 0; j < (grid[i].length); j++)
+        {
+          grid[i][j].is_alive = saved_grid[i][j];
+        }
+      
       }
+      break;
+      
+    case 'o':
+      grid[origin_x][origin_y].is_origin = false;
+      origin_x = (int) mouseX / _size;
+      origin_y = (int) mouseY / _size;
+      grid[origin_x][origin_y].is_origin = true;
+      break;
+      
+    case 'p':
+      for(int i = 0; i < construct.length; i++)
+      {
+        System.out.print("X: " + construct[i][0]);
+        System.out.println("Y: " + construct[i][1]);
+      }
+      break;
     
-    }
-  }
-  if(key == 'o')
-  {
-    grid[origin_x][origin_y].is_origin = false;
-    origin_x = (int) mouseX / _size;
-    origin_y = (int) mouseY / _size;
-    grid[origin_x][origin_y].is_origin = true;
+    case DELETE:
+      origin_x = 0;
+      origin_y = 0;
+      selected_cells = new Linked_list();
+      for(int i = 0; i < (grid.length); i ++)
+      {
+        for(int j = 0; j < (grid[i].length); j++)
+        {
+          grid[i][j].is_alive = false;
+          grid[i][j].is_selected = false;
+          grid[i][j].is_origin = false;
+          
+        }
+      
+      }
+    case 'w':
+      int type_of_construct = 0;
+      write_2_file(construct, type_of_construct);
+      System.out.println("Transcript successful.");
+      System.out.println("Please restart to update the saved constructs.");
   }
 }
 public void mouseDragged(){
@@ -122,6 +202,18 @@ public void mouseDragged(){
   {
     Cell cell_under_mouse = grid[current_x_index][current_y_index];
     cell_under_mouse.is_alive = !cell_under_mouse.is_alive;
+    if(is_right_click)
+    {
+      cell_under_mouse.is_selected = !cell_under_mouse.is_selected;
+      if(cell_under_mouse.is_selected)
+      {
+        selected_cells._add(cell_under_mouse);
+      }
+      else
+      {
+        selected_cells._remove(cell_under_mouse);
+      }
+    }
     last_x_index = current_x_index;
     last_y_index = current_y_index;
   }
@@ -157,4 +249,84 @@ public boolean exists(int i, int j, int grid_height, int grid_width){
     return false;
   }
   return true;
+}
+
+public int[][] constructor(int origin_x,int origin_y, Linked_list selected_cells)
+{
+  int [][] construct = new int[selected_cells.size][2];
+  Node current_node = selected_cells.head;
+  if (current_node == null)
+  {
+    System.out.println("No nodes selected.");
+    return construct;
+  }
+  for (int i =0; i < construct.length; i++)
+  {
+    construct[i][0] = current_node.data[0] - origin_x;
+    construct[i][1] = current_node.data[1] - origin_y;
+    current_node = current_node.next;
+  }
+  return construct;
+}
+
+public void deconstruct(int origin_x,int origin_y, int[][] construct, int grid_height, int grid_width)
+{
+  for (int i =0; i < construct.length; i++)
+  {
+    int current_x = origin_x + construct[i][0];
+    int current_y = origin_y + construct[i][1];
+    if(exists(current_x, current_y, grid_height, grid_width))
+    {
+      grid[current_x][current_y].is_alive = true;
+    }
+  }
+}
+public void write_2_file(int[][] construct, int type)
+{
+  try
+  {
+    //header
+    String ftype = String.format("%03d", type);
+    String flength = String.format("%03d", construct.length);
+    writer.write(ftype + flength);
+    //coordinates
+    for (int i =0; i < construct.length; i++)
+    {
+      writer.write(String.format("%03d", construct[i][0]) + String.format("%03d", construct[i][1]));
+    }
+    writer.write(System.lineSeparator());
+  }
+  catch(IOException error)
+  {
+    System.out.println("file = null.");
+  }
+  
+  
+}
+
+public void file_2_write(String construct)
+{
+  int SIZE_OF_COORDINATES = 6;
+  int size = Integer.valueOf(construct.substring(3, 6));
+  for (int i = 6; i <= (size*SIZE_OF_COORDINATES); i+=SIZE_OF_COORDINATES)
+  {
+    int construct_x = Integer.valueOf(construct.substring(i, i+3)) + origin_x;
+    int construct_y = Integer.valueOf(construct.substring(i+3, i+6)) + origin_y;
+    
+    grid[construct_x][construct_y].is_alive = true;
+    
+  }
+}
+
+public void exit()
+{
+  try
+  {
+    writer.close();
+  }
+  catch(IOException error)
+  {
+    System.out.println("file = null.");
+  }
+  
 }
